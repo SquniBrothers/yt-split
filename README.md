@@ -30,6 +30,9 @@ Twee workflows:
 
 # 720p, interactief chapters selecteren
 .\split.ps1 -u "https://www.youtube.com/watch?v=C03L903xe4w" -q "-" -s
+
+# Batch: alle URL's uit een tekstbestand (1 per regel) + thumbnails
+.\split.ps1 -f "urls.txt" -t
 ```
 
 ## Inhoud
@@ -47,6 +50,7 @@ Twee workflows:
   - [Met `-s` (download-sections per chapter)](#met--s-download-sections-per-chapter)
   - [`-d` (download only)](#-d-download-only)
   - [`-p` (preview)](#-p-preview)
+- [Batch (meerdere video's)](#batch-meerdere-videos)
 - [Output structuur](#output-structuur)
 - [Bestandsnamen](#bestandsnamen)
 - [Kwaliteitsniveaus](#kwaliteitsniveaus)
@@ -131,7 +135,7 @@ chmod +x split.sh
 ```
 
 `split.sh` gebruikt dezelfde flags, maar in lange vorm beschikbaar:
-`-u/--url`, `-b/--base-dir`, `-o/--output-dir`, `-s/--select`, `-t/--thumbnails`,
+`-u/--url`, `-f/--batch-file`, `-b/--base-dir`, `-o/--output-dir`, `-s/--select`, `-t/--thumbnails`,
 `-a/--accurate`, `-k/--keep`, `-l/--log`, `-p/--print-chapters`, `-d/--download-only`,
 `-q/--quality`, `-h/--help`. Paden gebruiken `/` i.p.v. `\` (default basis: `$HOME/videos`).
 
@@ -139,9 +143,10 @@ chmod +x split.sh
 
 | Parameter | Alias | Type | Default | Beschrijving |
 |---|---|---|---|---|
-| `-Url` | `-u` | string (verplicht) | — | YouTube video URL |
+| `-Url` | `-u` | string | — | YouTube video URL (`-u` óf `-f` verplicht) |
+| `-BatchFile` | `-f` | string | — | Tekstbestand met 1 URL per regel; lege regels en regels die met `#` beginnen worden genegeerd |
 | `-BaseDir` | `-b` | string | `$HOME\videos` | Basis directory voor downloads/output |
-| `-OutputDir` | `-o` | string | `$BaseDir\<kanaal>\<titel>` | Eigen output directory (overschrijft default) |
+| `-OutputDir` | `-o` | string | `$BaseDir\<kanaal>\<titel>` | Eigen output directory (overschrijft default; genegeerd in batch-modus) |
 | `-SelectChapters` | `-s` | switch | — | Toon chapters, selecteer interactief (V/n), download alleen geselecteerde met `--download-sections` |
 | `-Thumbnails` | `-t` | switch | — | Genereer een JPG thumbnail per chapter (midpoint) |
 | `-AccurateCut` | `-a` | switch | — | Re-encode voor frame-accurate cuts (langzamer, alleen zonder `-s`) |
@@ -193,6 +198,38 @@ metadata → print chapters → stoppen
 ```
 
 - Alle chapters in een tabel zien zonder iets te downloaden
+
+## Batch (meerdere video's)
+
+Met `-f` / `-BatchFile` (PowerShell) of `-f` / `--batch-file` (bash) verwerk je een
+heel tekstbestand aan video's achter elkaar. Het bestand bevat **één URL per regel**:
+
+```text
+# urls.txt — alles na een # en lege regels worden genegeerd
+https://www.youtube.com/watch?v=C03L903xe4w
+https://www.youtube.com/watch?v=dQw4w9WgXcQ
+
+# losse video die je later wil toevoegen:
+https://youtu.be/9bZkp7q19f0
+```
+
+```powershell
+# Windows
+.\split.ps1 -f "urls.txt" -t
+```
+
+```bash
+# Linux / macOS
+./split.sh -f urls.txt -t
+```
+
+- Alle andere flags (`-s`, `-t`, `-d`, `-q`, …) gelden voor **elke** video in de lijst.
+- Een mislukte video stopt de batch niet; aan het eind komt een overzicht met
+  `X/Y gelukt` en een lijst van wat faalde (exit-code 1 als er iets misging).
+- **`-o`/`-OutputDir` wordt genegeerd in batch-modus** — elke video krijgt zijn eigen
+  map `BaseDir\<kanaal>\<titel>\`, zodat ze elkaar niet overschrijven.
+- Je kunt `-u` en `-f` ook combineren; alle URL's worden samengevoegd.
+- Met `-s` (interactief chapters kiezen) word je **per video** om een selectie gevraagd.
 
 ## Output structuur
 

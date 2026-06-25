@@ -1,0 +1,10 @@
+# Voorbeeld batch-bestand voor split.ps1 / split.sh
+# Eén URL per regel. Lege regels en regels die met # beginnen worden genegeerd.
+# Gebruik:  .\split.ps1 -f urls.example.txt -t   (Windows)
+#           ./split.sh   -f urls.example.txt -t   (Linux/macOS)
+
+https://www.youtube.com/watch?v=C03L903xe4w
+https://www.youtube.com/watch?v=dQw4w9WgXcQ
+
+# Korte youtu.be links werken ook:
+https://youtu.be/9bZkp7q19f0

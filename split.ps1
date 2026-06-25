@@ -1,8 +1,12 @@
 [CmdletBinding()]
 param(
     [Alias("u")]
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $false)]
     [string]$Url,
+
+    [Alias("f")]
+    [Parameter(Mandatory = $false)]
+    [string]$BatchFile,
 
     [Alias("b")]
     [Parameter(Mandatory = $false)]
@@ -64,11 +68,13 @@ split.ps1 - Download en split YouTube video's op basis van chapters
 
 GEBRUIK:
     .\split.ps1 -Url <URL> [OPTIES]
+    .\split.ps1 -BatchFile <bestand.txt> [OPTIES]
 
 PARAMETERS:
-    -Url  (-u)  URL van de YouTube video (verplicht)
+    -Url  (-u)  URL van de YouTube video (of gebruik -BatchFile)
+    -BatchFile  (-f)  Tekstbestand met 1 URL per regel (lege regels en regels die met # beginnen worden genegeerd)
     -BaseDir  (-b)  Basis directory (default: `$HOME\videos)
-    -OutputDir  (-o)  Eigen output directory
+    -OutputDir  (-o)  Eigen output directory (genegeerd in batch-modus)
     -SelectChapters  (-s)  Toon chapters, selecteer interactief (V/n), download alleen geselecteerde
     -Thumbnails  (-t)  Genereer JPG thumbnails per chapter
     -AccurateCut  (-a)  Frame-accurate cuts (re-encode, langzamer)
@@ -84,6 +90,7 @@ VOORBEELDEN:
     .\split.ps1 -u "..." -s -t
     .\split.ps1 -u "..." -d -q "++"
     .\split.ps1 -u "..." -p
+    .\split.ps1 -f "urls.txt" -t
 "@
     return
 }
@@ -128,14 +135,6 @@ if (-not $jsRuntime) {
 }
 
 # ============================================
-# URL validatie
-# ============================================
-if ($Url -notmatch '^https?://') {
-    Write-Host "[ERROR] Ongeldige URL. Moet beginnen met http:// of https://" -ForegroundColor Red
-    exit 1
-}
-
-# ============================================
 # Quality mapping
 # ============================================
 $qualityFormat = switch ($Quality) {
@@ -154,9 +153,14 @@ function Get-SafeFileName {
 }
 
 # ============================================
-# Main
+# Eén video verwerken (download + split + thumbnails)
 # ============================================
-try {
+function Invoke-SplitVideo {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [string]$OutDirOverride
+    )
+
     Write-Host ""
     Write-Host "=== Metadata ophalen ===" -ForegroundColor Cyan
 
@@ -188,7 +192,7 @@ try {
         return
     }
 
-    $OutDir = if ($OutputDir) { $OutputDir } else { Join-Path $BaseDir "$ChannelName\$VideoTitle" }
+    $OutDir = if ($OutDirOverride) { $OutDirOverride } else { Join-Path $BaseDir "$ChannelName\$VideoTitle" }
     $null = New-Item -ItemType Directory -Force -Path $OutDir
 
     $JsonFile = Join-Path $OutDir "meta.json"
@@ -441,13 +445,87 @@ try {
     Write-Host "=== Gereed! ===" -ForegroundColor Green
     Write-Host "Output: $OutDir"
 }
-catch {
-    Write-Host ""
-    Write-Host "[ERROR] $_" -ForegroundColor Red
+
+# ============================================
+# URL-lijst opbouwen (enkele URL en/of batch-bestand)
+# ============================================
+$urls = [System.Collections.Generic.List[string]]::new()
+if ($Url) { $urls.Add($Url) }
+if ($BatchFile) {
+    if (-not (Test-Path $BatchFile)) {
+        Write-Host "[ERROR] Batch-bestand niet gevonden: $BatchFile" -ForegroundColor Red
+        if ($LogFile) { Stop-Transcript }
+        exit 1
+    }
+    Get-Content -Path $BatchFile | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -and -not $line.StartsWith('#')) { $urls.Add($line) }
+    }
+}
+
+if ($urls.Count -eq 0) {
+    Write-Host "[ERROR] Geen URL opgegeven. Gebruik -Url <URL> of -BatchFile <bestand>." -ForegroundColor Red
+    if ($LogFile) { Stop-Transcript }
     exit 1
+}
+
+if ($BatchFile -and $OutputDir) {
+    Write-Host "[WARN] -OutputDir wordt genegeerd in batch-modus; elke video krijgt een eigen map onder -BaseDir." -ForegroundColor Yellow
+}
+
+# ============================================
+# Main loop
+# ============================================
+$exitCode = 0
+$failed = [System.Collections.Generic.List[string]]::new()
+$idx = 0
+
+try {
+    foreach ($currentUrl in $urls) {
+        $idx++
+
+        if ($urls.Count -gt 1) {
+            Write-Host ""
+            Write-Host "############################################" -ForegroundColor Magenta
+            Write-Host "# [$idx/$($urls.Count)] $currentUrl" -ForegroundColor Magenta
+            Write-Host "############################################" -ForegroundColor Magenta
+        }
+
+        if ($currentUrl -notmatch '^https?://') {
+            Write-Host "[ERROR] Ongeldige URL overgeslagen: $currentUrl" -ForegroundColor Red
+            $failed.Add($currentUrl)
+            continue
+        }
+
+        # In batch-modus negeren we -OutputDir zodat video's elkaar niet overschrijven
+        $outOverride = if ($urls.Count -gt 1) { $null } else { $OutputDir }
+
+        try {
+            Invoke-SplitVideo -Url $currentUrl -OutDirOverride $outOverride
+        }
+        catch {
+            Write-Host ""
+            Write-Host "[ERROR] $currentUrl : $_" -ForegroundColor Red
+            $failed.Add($currentUrl)
+        }
+    }
+
+    if ($urls.Count -gt 1) {
+        Write-Host ""
+        $ok = $urls.Count - $failed.Count
+        Write-Host "=== Batch klaar: $ok/$($urls.Count) gelukt ===" -ForegroundColor Green
+        if ($failed.Count -gt 0) {
+            Write-Host "Mislukt:" -ForegroundColor Red
+            $failed | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
+        }
+    }
+
+    if ($failed.Count -gt 0) { $exitCode = 1 }
 }
 finally {
     if ($LogFile) {
         Stop-Transcript
     }
 }
+
+exit $exitCode
