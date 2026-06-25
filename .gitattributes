@@ -1,0 +1,8 @@
+# Shell scripts moeten altijd LF line-endings hebben (anders breekt de shebang op Linux)
+*.sh text eol=lf
+
+# PowerShell scripts CRLF (Windows)
+*.ps1 text eol=crlf
+
+# Markdown laat Git normaliseren
+*.md text

@@ -1,0 +1,18 @@
+# Oude versies / lokale rommel
+split0.ps1
+errr.txt
+
+# Video output
+videos/
+downloads/
+*.mp4
+*.jpg
+*.jpeg
+*.png
+*.webm
+*.mkv
+*.part
+meta.json
+
+# Logs
+*.log
