@@ -14,6 +14,7 @@ Twee workflows:
 
 - [Vereisten](#vereisten)
 - [Installatie](#installatie)
+  - [Windows (winget)](#windows-winget)
   - [macOS (Homebrew)](#macos-homebrew)
   - [Debian / Ubuntu (apt)](#debian--ubuntu-apt)
   - [Arch Linux (pacman)](#arch-linux-pacman)
@@ -45,6 +46,23 @@ Twee workflows:
 
 > `ffprobe` zit in het `ffmpeg`-pakket. `node` levert de JavaScript runtime (mag ook `deno`).
 > Houd **yt-dlp** up-to-date — YouTube wijzigt vaak en oude versies breken.
+
+### Windows (winget)
+
+Voor `split.ps1`. `jq` is hier niet nodig (PowerShell parset de JSON zelf).
+
+```powershell
+winget install Git.Git
+winget install yt-dlp.yt-dlp
+winget install Gyan.FFmpeg
+winget install OpenJS.NodeJS
+# Herstart hierna de terminal zodat de PATH bijgewerkt is.
+
+git clone https://github.com/SquniBrothers/yt-split.git
+cd yt-split
+.\split.ps1 -u "https://www.youtube.com/watch?v=..." -s -t
+# updaten kan later met: yt-dlp -U
+```
 
 ### macOS (Homebrew)
 
