@@ -13,6 +13,10 @@ Twee workflows:
 ## Inhoud
 
 - [Vereisten](#vereisten)
+- [Installatie](#installatie)
+  - [macOS (Homebrew)](#macos-homebrew)
+  - [Debian / Ubuntu (apt)](#debian--ubuntu-apt)
+  - [Arch Linux (pacman)](#arch-linux-pacman)
 - [Linux / macOS (`split.sh`)](#linux--macos-splitsh)
 - [Parameters](#parameters)
 - [Workflows](#workflows)
@@ -36,6 +40,49 @@ Twee workflows:
 - [ffmpeg](https://ffmpeg.org/) (met ffprobe)
 - Een JavaScript runtime voor YouTube-extractie: [node](https://nodejs.org/), [deno](https://deno.com/) of bun (wordt automatisch gedetecteerd)
 - **Alleen `split.sh`:** [jq](https://jqlang.github.io/jq/) voor het parsen van de metadata
+
+## Installatie
+
+> `ffprobe` zit in het `ffmpeg`-pakket. `node` levert de JavaScript runtime (mag ook `deno`).
+> Houd **yt-dlp** up-to-date — YouTube wijzigt vaak en oude versies breken.
+
+### macOS (Homebrew)
+
+[Homebrew](https://brew.sh) vereist.
+
+```bash
+brew install git yt-dlp ffmpeg jq node
+
+git clone https://github.com/SquniBrothers/yt-split.git
+cd yt-split
+chmod +x split.sh
+```
+
+### Debian / Ubuntu (apt)
+
+```bash
+sudo apt update
+sudo apt install -y git ffmpeg jq nodejs
+
+# yt-dlp rechtstreeks (apt-versie is vaak verouderd):
+sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+sudo chmod a+rx /usr/local/bin/yt-dlp
+# updaten kan later met: sudo yt-dlp -U
+
+git clone https://github.com/SquniBrothers/yt-split.git
+cd yt-split
+chmod +x split.sh
+```
+
+### Arch Linux (pacman)
+
+```bash
+sudo pacman -S --needed git yt-dlp ffmpeg jq nodejs
+
+git clone https://github.com/SquniBrothers/yt-split.git
+cd yt-split
+chmod +x split.sh
+```
 
 ## Linux / macOS (`split.sh`)
 
