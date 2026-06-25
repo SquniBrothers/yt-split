@@ -10,6 +10,28 @@ Twee workflows:
 - **Zonder `-s`** — download de hele video, splitst met ffmpeg in chapters
 - **Met `-s`** — kies interactief chapters, download alleen die stukken via `--download-sections`
 
+## Voorbeelden
+
+```powershell
+# Alle chapters, standaard instellingen
+.\split.ps1 -u "https://www.youtube.com/watch?v=C03L903xe4w"
+
+# Interactief chapters selecteren + thumbnails
+.\split.ps1 -u "https://www.youtube.com/watch?v=C03L903xe4w" -s -t
+
+# Chapters previewen (geen download)
+.\split.ps1 -u "https://www.youtube.com/watch?v=C03L903xe4w" -p
+
+# Alleen downloaden, 4K kwaliteit
+.\split.ps1 -u "https://www.youtube.com/watch?v=C03L903xe4w" -d -q "++"
+
+# Frame-accurate cuts + eigen output map
+.\split.ps1 -u "https://www.youtube.com/watch?v=C03L903xe4w" -a -o "D:\bewerkt"
+
+# 720p, interactief chapters selecteren
+.\split.ps1 -u "https://www.youtube.com/watch?v=C03L903xe4w" -q "-" -s
+```
+
 ## Inhoud
 
 - [Vereisten](#vereisten)
@@ -25,7 +47,6 @@ Twee workflows:
   - [Met `-s` (download-sections per chapter)](#met--s-download-sections-per-chapter)
   - [`-d` (download only)](#-d-download-only)
   - [`-p` (preview)](#-p-preview)
-- [Voorbeelden](#voorbeelden)
 - [Output structuur](#output-structuur)
 - [Bestandsnamen](#bestandsnamen)
 - [Kwaliteitsniveaus](#kwaliteitsniveaus)
@@ -172,28 +193,6 @@ metadata → print chapters → stoppen
 ```
 
 - Alle chapters in een tabel zien zonder iets te downloaden
-
-## Voorbeelden
-
-```powershell
-# Alle chapters, standaard instellingen
-.\split.ps1 -u "https://www.youtube.com/watch?v=C03L903xe4w"
-
-# Interactief chapters selecteren + thumbnails
-.\split.ps1 -u "https://www.youtube.com/watch?v=C03L903xe4w" -s -t
-
-# Chapters previewen (geen download)
-.\split.ps1 -u "https://www.youtube.com/watch?v=C03L903xe4w" -p
-
-# Alleen downloaden, 4K kwaliteit
-.\split.ps1 -u "https://www.youtube.com/watch?v=C03L903xe4w" -d -q "++"
-
-# Frame-accurate cuts + eigen output map
-.\split.ps1 -u "https://www.youtube.com/watch?v=C03L903xe4w" -a -o "D:\bewerkt"
-
-# 720p, interactief chapters selecteren
-.\split.ps1 -u "https://www.youtube.com/watch?v=C03L903xe4w" -q "-" -s
-```
 
 ## Output structuur
 
