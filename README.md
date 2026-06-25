@@ -10,6 +10,26 @@ Twee workflows:
 - **Zonder `-s`** — download de hele video, splitst met ffmpeg in chapters
 - **Met `-s`** — kies interactief chapters, download alleen die stukken via `--download-sections`
 
+## Inhoud
+
+- [Vereisten](#vereisten)
+- [Linux / macOS (`split.sh`)](#linux--macos-splitsh)
+- [Parameters](#parameters)
+- [Workflows](#workflows)
+  - [Zonder `-s` (hele video + ffmpeg split)](#zonder--s-hele-video--ffmpeg-split)
+  - [Met `-s` (download-sections per chapter)](#met--s-download-sections-per-chapter)
+  - [`-d` (download only)](#-d-download-only)
+  - [`-p` (preview)](#-p-preview)
+- [Voorbeelden](#voorbeelden)
+- [Output structuur](#output-structuur)
+- [Bestandsnamen](#bestandsnamen)
+- [Kwaliteitsniveaus](#kwaliteitsniveaus)
+- [Best practices](#best-practices)
+  - [Wanneer welke workflow?](#wanneer-welke-workflow)
+  - [`-s` vs geen `-s`: afweging](#-s-vs-geen--s-afweging)
+  - [Kwaliteit advies](#kwaliteit-advies)
+  - [Veelgemaakte fouten](#veelgemaakte-fouten)
+
 ## Vereisten
 
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp)
