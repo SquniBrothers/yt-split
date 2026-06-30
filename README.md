@@ -35,7 +35,78 @@ Twee workflows:
 .\split.ps1 -f "urls.txt" -t
 ```
 
+## Voorbeeld-run
+
+Een volledige run zonder `-s` (hele video downloaden + ffmpeg split per chapter):
+
+```text
+➜  ys -u "https://www.youtube.com/watch?v=mABpAI-pCw0"
+
+=== Metadata ophalen ===
+[x] Metadata opgehaald
+
+Command Line Basics for Beginners - Full Course
+
+freeCodeCamp.org
+
+[x] Metadata opgeslagen
+
+
+=== Video downloaden ===
+[youtube] Extracting URL: https://www.youtube.com/watch?v=mABpAI-pCw0
+[youtube] mABpAI-pCw0: Downloading webpage
+[youtube] mABpAI-pCw0: Downloading android vr player API JSON
+[youtube] mABpAI-pCw0: Downloading player 7a37f05b-main
+[youtube] [jsc:node] Solving JS challenges using node
+[youtube] mABpAI-pCw0: Downloading m3u8 information
+[info] mABpAI-pCw0: Downloading 1 format(s): 399+251
+[download] Destination: C:\Users\User\videos\downloads\freeCodeCamp.org\Command_Line_Basics_for_Beginners_-_Full_Course\video.f399.mp4
+[download] 100% of   43.25MiB in 00:00:02 at 15.96MiB/s
+[download] Destination: C:\Users\User\videos\downloads\freeCodeCamp.org\Command_Line_Basics_for_Beginners_-_Full_Course\video.f251.webm
+[download] 100% of   37.10MiB in 00:00:01 at 19.01MiB/s
+[Merger] Merging formats into "C:\Users\User\videos\downloads\freeCodeCamp.org\Command_Line_Basics_for_Beginners_-_Full_Course\video.mp4"
+Deleting original file C:\Users\User\videos\downloads\freeCodeCamp.org\Command_Line_Basics_for_Beginners_-_Full_Course\video.f399.mp4 (pass -k to keep)
+Deleting original file C:\Users\User\videos\downloads\freeCodeCamp.org\Command_Line_Basics_for_Beginners_-_Full_Course\video.f251.webm (pass -k to keep)
+[x] Video gedownload
+
+=== Chapters verwerken ===
+
+=== Chapter Index ===
+
+start_time end_time title
+---------- -------- -----
+       0,0    176,0 Intro
+     176,0    522,0 Demystifying the command line
+     522,0    857,0 Inspect the file tree with ls
+     857,0   1236,0 Rules of navigation
+    1236,0   1521,0 Create & delete files with touch and rm
+    1521,0   1818,0 Create & delete directories with mkdir, rmdir, and -r
+    1818,0   2244,0 Write to files with echo
+    2244,0   2612,0 Read from files with cat
+    2612,0     2719 Section 1 outro
+
+
+=== Video splitsen ===
+[1/9] 01_Intro.mp4
+[2/9] 02_Demystifying_the_command_line.mp4
+[3/9] 03_Inspect_the_file_tree_with_ls.mp4
+[4/9] 04_Rules_of_navigation.mp4
+[5/9] 05_Create_&_delete_files_with_touch_and_rm.mp4
+[6/9] 06_Create_&_delete_directories_with_mkdir,_rmdir,_and_-r.mp4
+[7/9] 07_Write_to_files_with_echo.mp4
+[8/9] 08_Read_from_files_with_cat.mp4
+[9/9] 09_Section_1_outro.mp4
+
+=== Opruimen ===
+[x] Downloads verwijderd
+
+=== Gereed! ===
+Output: C:\Users\User\videos\freeCodeCamp.org\Command_Line_Basics_for_Beginners_-_Full_Course
+```
+
 ## Inhoud
+
+- [Voorbeeld-run](#voorbeeld-run)
 
 - [Vereisten](#vereisten)
 - [Installatie](#installatie)
@@ -43,6 +114,7 @@ Twee workflows:
   - [macOS (Homebrew)](#macos-homebrew)
   - [Debian / Ubuntu (apt)](#debian--ubuntu-apt)
   - [Arch Linux (pacman)](#arch-linux-pacman)
+- [Alias instellen (optioneel)](#alias-instellen-optioneel)
 - [Linux / macOS (`split.sh`)](#linux--macos-splitsh)
 - [Parameters](#parameters)
 - [Workflows](#workflows)
@@ -125,6 +197,50 @@ sudo pacman -S --needed git yt-dlp ffmpeg jq nodejs
 git clone https://github.com/SquniBrothers/yt-split.git
 cd yt-split
 chmod +x split.sh
+```
+
+## Alias instellen (optioneel)
+
+Wil je het script overal kunnen aanroepen met een korte naam (bijv. `ys`) i.p.v. het
+volledige pad? Voeg dan een alias toe aan je shell-profiel. Pas het pad aan naar waar je
+`yt-split` hebt gekloond.
+
+### PowerShell
+
+Open je profiel met `notepad $PROFILE` (maak het aan als het nog niet bestaat) en voeg toe:
+
+```powershell
+function ytsplit {
+    & "C:\Users\User\scripts\yt-split\split.ps1" @args
+}
+Set-Alias ys ytsplit
+```
+
+> Een directe `Set-Alias ys "...\split.ps1"` werkt niet met argumenten — vandaar het
+> wrapper-functietje `ytsplit` dat `@args` doorgeeft. Herstart de terminal of run
+> `. $PROFILE` om de wijziging te laden.
+
+Gebruik daarna overal:
+
+```powershell
+ys -u "https://www.youtube.com/watch?v=..." -s -t
+```
+
+### bash / zsh
+
+Voeg toe aan `~/.bashrc` (bash) of `~/.zshrc` (zsh):
+
+```bash
+ys() { "$HOME/scripts/yt-split/split.sh" "$@"; }
+```
+
+> Een functie geeft (anders dan een kale `alias`) de argumenten netjes door via `"$@"`.
+> Herlaad met `source ~/.bashrc` (of `~/.zshrc`) of open een nieuwe terminal.
+
+Gebruik daarna overal:
+
+```bash
+ys -u "https://www.youtube.com/watch?v=..." -s -t
 ```
 
 ## Linux / macOS (`split.sh`)
