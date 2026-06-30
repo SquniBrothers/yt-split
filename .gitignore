@@ -2,6 +2,9 @@
 split0.ps1
 errr.txt
 
+# Persoonlijke batch-lijst (zie urls.example.txt als template)
+urls.txt
+
 # Video output
 videos/
 downloads/
