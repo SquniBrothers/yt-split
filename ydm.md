@@ -40,8 +40,9 @@ ydm "https://www.youtube.com/@DeShow/videos" -pc
 # Artiest en album zelf bepalen
 ydm "https://www.youtube.com/watch?v=..." -s -Artist "Various Artists" -Album "Zomer 2026"
 
-# Batch: alles uit een tekstbestand (1 URL per regel)
-ydm -f "albums.txt" -s -q 320
+# Batch: een lijst met secties (# Music / # Podcasts / # Audiobooks) en
+# opties achter losse URLs
+ydm -f "lijst.txt"
 ```
 
 ## Voorbeeld-run
@@ -111,7 +112,7 @@ Set-Alias ydm ytmusic
 | Parameter | Alias | Type | Default | Beschrijving |
 |---|---|---|---|---|
 | `-Url` | `-u` | string | — | URL van video, playlist of channel (mag ook positioneel: `ydm "https://..."`) |
-| `-BatchFile` | `-f` | string | — | Tekstbestand met 1 URL per regel; lege regels en regels die met `#` beginnen worden genegeerd |
+| `-BatchFile` | `-f` | string | — | Tekstbestand met 1 URL per regel, met [secties en opties per regel](#batch-meerdere-urls) |
 | `-BaseDir` | `-b` | string | `$HOME\music` | Basis directory voor de output |
 | `-OutputDir` | `-o` | string | zie [output](#output-structuur) | Eigen output directory (genegeerd in batch-modus) |
 | `-Items` | `-i` | string | — | Selectie uit een playlist, yt-dlp syntax: `"1-5"`, `"3,7,9"`, `"5-"`, `":10"` |
@@ -291,24 +292,86 @@ Alles bestaat al in C:\Users\User\music\Pink_Floyd\The_Wall - niets te doen
 
 ## Batch (meerdere URL's)
 
-```powershell
-# albums.txt — alles na een # en lege regels worden genegeerd
-# Albums om te splitsen:
-https://www.youtube.com/watch?v=...
-https://www.youtube.com/watch?v=...
+Een lijst met één URL per regel; lege regels en `#`-regels worden overgeslagen.
 
-# En een hele playlist:
+```
+# lijst.txt
+https://www.youtube.com/watch?v=...
 https://www.youtube.com/playlist?list=PL...
 ```
 
 ```powershell
-ydm -f "albums.txt" -s -q 320
+ydm -f "lijst.txt" -q 320
 ```
 
 Per regel wordt opnieuw bepaald of het een losse video of een playlist is, dus `-s` werkt
-gewoon voor de video's in de lijst. Elke URL krijgt zijn eigen map, dus `-o` wordt in
-batch-modus genegeerd. Een URL die mislukt stopt de rest niet; aan het eind volgt een
-telling.
+gewoon voor de video's in de lijst. Een URL die mislukt stopt de rest niet; aan het eind
+volgt een telling.
+
+### Secties
+
+Een kopregel zet de modus voor alles eronder, zodat muziek, podcasts en luisterboeken in
+één bestand kunnen:
+
+```
+# Podcasts
+https://www.youtube.com/@DeShow/videos
+https://www.youtube.com/watch?v=...
+
+# Music
+https://www.youtube.com/playlist?list=PL...
+https://www.youtube.com/watch?v=...
+
+# Audiobooks
+https://www.youtube.com/watch?v=...
+```
+
+Herkend worden `# Music` (ook `Muziek`, `Songs`, `Albums`), `# Podcasts` (`Shows`,
+`Afleveringen`) en `# Audiobooks` (`Luisterboeken`, `Hoorboeken`, `Boeken`) — enkelvoud of
+meervoud, hoofdletters maken niet uit. Een `#`-regel die géén sectienaam is blijft gewoon
+commentaar, dus bestaande lijsten blijven werken zoals ze waren. Zonder sectie is het
+muziek, of wat je op de commandline meegaf.
+
+### Opties per regel
+
+Achter een URL mag je dezelfde opties zetten als op de commandline. Die gelden alleen voor
+die regel en gaan vóór de sectie:
+
+```
+# Podcasts
+https://www.youtube.com/watch?v=...                 # gewone aflevering
+https://www.youtube.com/watch?v=... -s              # deze wél in hoofdstukken
+
+# Music
+https://www.youtube.com/watch?v=... -s -q 320       # album opknippen, hoge bitrate
+https://www.youtube.com/watch?v=... -c -x m4a       # vierkante art, als m4a
+https://www.youtube.com/watch?v=... -ab             # tóch een luisterboek
+https://www.youtube.com/watch?v=... -Artist "Nina Simone" -Album "Live"
+https://www.youtube.com/playlist?list=PL... -i "1-10" -o "D:\ergens anders"
+```
+
+| Optie | Betekenis |
+|---|---|
+| `-s` / `-split` | splitsen op chapters |
+| `-ab` / `-audiobook` | luisterboek (ook binnen een andere sectie) |
+| `-pc` / `-podcast` | podcast |
+| `-m` / `-music` | terug naar muziek, ongeacht de sectie |
+| `-q <waarde>`, `-x <mp3\|m4a>`, `-i <selectie>` | zoals op de commandline |
+| `-c`, `-a`, `-n`, `-k`, `-r`, `-keepfull` | de schakelaars |
+| `-b <map>`, `-o <map>` | eigen map; `-b` gaat vóór de preset-map |
+| `-Artist "..."`, `-Album "..."` | tags forceren (quotes voor spaties) |
+
+Alles na een spatie en een `#` is commentaar — een `#` in de URL zelf heeft geen spatie
+ervoor en blijft dus staan. Een optie die niet klopt wordt met regelnummer gemeld en
+overgeslagen, de rest draait gewoon door:
+
+```
+[WARN] regel 19: onbekende optie '-zzz' genegeerd
+[WARN] regel 19: 'flac' is geen geldig formaat, genegeerd
+```
+
+Elke URL krijgt zijn eigen map, dus de globale `-o` geldt niet voor een hele lijst; zet er
+per regel een `-o` achter als je dat wil.
 
 ## Kwaliteit
 

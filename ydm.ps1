@@ -110,7 +110,10 @@ GEBRUIK:
 
 PARAMETERS:
     -Url  (-u)  URL van video, playlist of channel (mag ook positioneel)
-    -BatchFile  (-f)  Tekstbestand met 1 URL per regel (# = commentaar)
+    -BatchFile  (-f)  Tekstbestand met 1 URL per regel (# = commentaar). Een kopregel
+                      "# Music", "# Podcasts" of "# Audiobooks" zet de modus voor alles
+                      eronder, en achter een URL mag je dezelfde opties zetten als hier
+                      (-s, -ab, -pc, -q 320, -c, ...). Zie ydm.md.
     -BaseDir  (-b)  Basis directory (default: `$HOME\music)
     -OutputDir  (-o)  Eigen output directory (genegeerd in batch-modus)
     -Items  (-i)  Selectie uit een playlist, yt-dlp syntax: "1-5", "3,7,9", "5-", ":10"
@@ -145,26 +148,31 @@ VOORBEELDEN:
     return
 }
 
-# ============================================
-# Presets: -Audiobook en -Podcast zetten alleen de standaardmap en een paar
-# defaults. Een eigen -BaseDir of -OutputDir gaat er altijd voor.
-# ============================================
 if ($Audiobook -and $Podcast) {
     Write-Host "[ERROR] -Audiobook en -Podcast gaan niet samen; kies er een." -ForegroundColor Red
     exit 1
 }
 
-$genre = $null
-if ($Audiobook) {
-    $genre = 'Audiobook'
-    if (-not $PSBoundParameters.ContainsKey('BaseDir')) { $BaseDir = Join-Path $HOME 'Audiobooks' }
-    # Een luisterboek met chapters wil je per hoofdstuk; zonder chapters blijft
-    # het gewoon één bestand (met een waarschuwing).
-    $Split = $true
-}
-if ($Podcast) {
-    $genre = 'Podcast'
-    if (-not $PSBoundParameters.ContainsKey('BaseDir')) { $BaseDir = Join-Path $HOME 'Podcasts' }
+# Wat op de commandline staat is de basis; een batch-bestand mag er per regel
+# overheen (zie Set-RunOptions en Read-BatchFile).
+$BaseOptions = @{
+    Split           = [bool]$Split
+    Audiobook       = [bool]$Audiobook
+    Podcast         = [bool]$Podcast
+    Crop            = [bool]$Crop
+    NoArt           = [bool]$NoArt
+    NoIndex         = [bool]$NoIndex
+    KeepText        = [bool]$KeepText
+    Reverse         = [bool]$Reverse
+    KeepFull        = [bool]$KeepFull
+    Items           = $Items
+    Artist          = $Artist
+    Album           = $Album
+    OutputDir       = $OutputDir
+    Quality         = $Quality
+    Format          = $Format
+    BaseDir         = $BaseDir
+    BaseDirExplicit = $PSBoundParameters.ContainsKey('BaseDir')
 }
 
 # ============================================
@@ -206,26 +214,78 @@ if (-not $jsRuntime) {
     Write-Host "       https://github.com/yt-dlp/yt-dlp/wiki/EJS" -ForegroundColor Yellow
 }
 
-# ============================================
-# Quality / format mapping
-# ============================================
-$bitrate = switch ($Quality) {
-    '++'  { 320 }
-    '320' { 320 }
-    '256' { 256 }
-    '+'   { 192 }
-    '192' { 192 }
-    '-'   { 128 }
-    '128' { 128 }
-    '--'  { 96 }
-    '96'  { 96 }
-}
-$audioCodec = if ($Format -eq 'm4a') { 'aac' } else { 'libmp3lame' }
-$ext = ".$Format"
-
 # Werkmap per video buiten de muziekmap, zodat een afgebroken run geen halve
 # downloads tussen de nummers achterlaat.
 $CacheRoot = Join-Path ([System.IO.Path]::GetTempPath()) "ydm"
+
+$ValidQuality = @('++', '+', '-', '--', '320', '256', '192', '128', '96')
+$ValidFormat  = @('mp3', 'm4a')
+
+# ============================================
+# Opties voor één URL klaarzetten
+# De basis is de commandline; $Override komt uit een regel van het batch-bestand.
+# Alles wat de download-functies lezen wordt hier gezet, inclusief wat eruit
+# volgt: de bitrate, de codec, de extensie, het genre en de doelmap.
+# ============================================
+function Set-RunOptions {
+    param([hashtable]$Override = @{})
+
+    $o = @{}
+    foreach ($k in $BaseOptions.Keys)  { $o[$k] = $BaseOptions[$k] }
+    foreach ($k in $Override.Keys)     { $o[$k] = $Override[$k] }
+
+    $script:Split     = [bool]$o.Split
+    $script:Audiobook = [bool]$o.Audiobook
+    $script:Podcast   = [bool]$o.Podcast
+    $script:Crop      = [bool]$o.Crop
+    $script:NoArt     = [bool]$o.NoArt
+    $script:NoIndex   = [bool]$o.NoIndex
+    $script:KeepText  = [bool]$o.KeepText
+    $script:Reverse   = [bool]$o.Reverse
+    $script:KeepFull  = [bool]$o.KeepFull
+    $script:Items     = [string]$o.Items
+    $script:Artist    = [string]$o.Artist
+    $script:Album     = [string]$o.Album
+    $script:OutputDir = [string]$o.OutputDir
+    $script:Format    = [string]$o.Format
+
+    $script:bitrate = switch ("$($o.Quality)") {
+        '++'  { 320 }
+        '320' { 320 }
+        '256' { 256 }
+        '+'   { 192 }
+        '192' { 192 }
+        '-'   { 128 }
+        '128' { 128 }
+        '--'  { 96 }
+        '96'  { 96 }
+        default { 192 }
+    }
+    $script:audioCodec = if ($script:Format -eq 'm4a') { 'aac' } else { 'libmp3lame' }
+    $script:ext = ".$($script:Format)"
+
+    # Presets: alleen de standaardmap en een paar defaults. Een eigen -BaseDir
+    # (op de commandline of op de regel zelf) gaat er altijd voor.
+    $script:genre = $null
+    $script:BaseDir = [string]$o.BaseDir
+    if ($script:Audiobook) {
+        $script:genre = 'Audiobook'
+        if (-not $o.BaseDirExplicit) { $script:BaseDir = Join-Path $HOME 'Audiobooks' }
+        # Een luisterboek met chapters wil je per hoofdstuk; zonder chapters
+        # blijft het gewoon één bestand (met een waarschuwing).
+        $script:Split = $true
+    }
+    if ($script:Podcast) {
+        $script:genre = 'Podcast'
+        if (-not $o.BaseDirExplicit) { $script:BaseDir = Join-Path $HOME 'Podcasts' }
+    }
+}
+
+function Get-ModeLabel {
+    if ($Audiobook) { return 'luisterboek' }
+    if ($Podcast)   { return 'podcast' }
+    return 'muziek'
+}
 
 # ============================================
 # Helper functies
@@ -412,6 +472,169 @@ function Get-ChaptersFromDescription {
 
     if ($result.Count -lt 2) { return @() }
     return @($result)
+}
+
+# ============================================
+# Batch-bestand lezen
+#
+# Een kopregel zet de modus voor alles eronder, en achter een URL mag je
+# dezelfde opties zetten als op de commandline:
+#
+#     # Podcasts
+#     https://www.youtube.com/@DeShow/videos
+#
+#     # Music
+#     https://www.youtube.com/watch?v=...  -s -q 320
+#
+#     # Audiobooks
+#     https://www.youtube.com/watch?v=...
+#
+# Een "#"-regel die geen bekende sectienaam is blijft gewoon commentaar.
+# ============================================
+$SectionModes = @(
+    @{ Pattern = '^(music|muziek|songs?|albums?|tracks?)$';                  Mode = @{ Audiobook = $false; Podcast = $false } }
+    @{ Pattern = '^(podcasts?|shows?|afleveringen)$';                        Mode = @{ Audiobook = $false; Podcast = $true  } }
+    @{ Pattern = '^(audiobooks?|luisterboeken?|boeken?|hoorboeken?)$';       Mode = @{ Audiobook = $true;  Podcast = $false } }
+)
+
+# Opties die een waarde achter zich hebben, en losse schakelaars
+$ValueFlags = @{
+    'q' = 'Quality'; 'quality' = 'Quality'
+    'x' = 'Format';  'format'  = 'Format'
+    'i' = 'Items';   'items'   = 'Items'
+    'b' = 'BaseDir'; 'basedir' = 'BaseDir'
+    'o' = 'OutputDir'; 'outputdir' = 'OutputDir'
+    'artist' = 'Artist'; 'album' = 'Album'
+}
+$SwitchFlags = @{
+    's' = 'Split';    'split'    = 'Split'
+    'c' = 'Crop';     'crop'     = 'Crop'
+    'a' = 'NoArt';    'noart'    = 'NoArt'
+    'n' = 'NoIndex';  'noindex'  = 'NoIndex'
+    'k' = 'KeepText'; 'keeptext' = 'KeepText'
+    'r' = 'Reverse';  'reverse'  = 'Reverse'
+    'keepfull' = 'KeepFull'
+}
+
+function Get-SectionMode {
+    param([string]$Comment)
+    $key = ($Comment -replace '[^\p{L}]', '').ToLowerInvariant()
+    if (-not $key) { return $null }
+    foreach ($s in $SectionModes) {
+        if ($key -match $s.Pattern) { return $s.Mode }
+    }
+    return $null
+}
+
+# Woorden splitsen, maar "tussen quotes" bij elkaar houden
+function Split-OptionTokens {
+    param([string]$Text)
+    $tokens = [System.Collections.Generic.List[string]]::new()
+    foreach ($m in [regex]::Matches($Text, '"([^"]*)"|(\S+)')) {
+        if ($m.Groups[1].Success) { $null = $tokens.Add($m.Groups[1].Value) }
+        else                      { $null = $tokens.Add($m.Groups[2].Value) }
+    }
+    return $tokens.ToArray()
+}
+
+function ConvertTo-LineOptions {
+    param([string[]]$Tokens, [int]$LineNo)
+
+    $o = @{}
+    $i = 0
+    while ($i -lt $Tokens.Count) {
+        $raw = $Tokens[$i]
+        $i++
+
+        if (-not $raw.StartsWith('-')) {
+            Write-Host "[WARN] regel ${LineNo}: '$raw' is geen optie en wordt genegeerd" -ForegroundColor Yellow
+            continue
+        }
+
+        $name = $raw.TrimStart('-').ToLowerInvariant()
+
+        if ($ValueFlags.ContainsKey($name)) {
+            if ($i -ge $Tokens.Count) {
+                Write-Host "[WARN] regel ${LineNo}: '$raw' mist een waarde en wordt genegeerd" -ForegroundColor Yellow
+                continue
+            }
+            $key = $ValueFlags[$name]
+            $val = $Tokens[$i]
+            $i++
+
+            if ($key -eq 'Quality' -and $val -notin $ValidQuality) {
+                Write-Host "[WARN] regel ${LineNo}: '$val' is geen geldige kwaliteit, genegeerd" -ForegroundColor Yellow
+                continue
+            }
+            if ($key -eq 'Format' -and $val.ToLowerInvariant() -notin $ValidFormat) {
+                Write-Host "[WARN] regel ${LineNo}: '$val' is geen geldig formaat, genegeerd" -ForegroundColor Yellow
+                continue
+            }
+            if ($key -eq 'Format') { $val = $val.ToLowerInvariant() }
+
+            $o[$key] = $val
+            if ($key -eq 'BaseDir') { $o['BaseDirExplicit'] = $true }
+        }
+        elseif ($SwitchFlags.ContainsKey($name)) {
+            $o[$SwitchFlags[$name]] = $true
+        }
+        elseif ($name -in @('ab', 'audiobook', 'luisterboek')) {
+            $o['Audiobook'] = $true;  $o['Podcast'] = $false
+        }
+        elseif ($name -in @('pc', 'ps', 'podcast')) {
+            $o['Podcast'] = $true;    $o['Audiobook'] = $false
+        }
+        elseif ($name -in @('m', 'music', 'muziek')) {
+            $o['Podcast'] = $false;   $o['Audiobook'] = $false
+        }
+        else {
+            Write-Host "[WARN] regel ${LineNo}: onbekende optie '$raw' genegeerd" -ForegroundColor Yellow
+        }
+    }
+    return $o
+}
+
+function Read-BatchFile {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $jobs = [System.Collections.Generic.List[object]]::new()
+    $section = @{}
+    $lineNo = 0
+
+    foreach ($rawLine in (Get-Content -LiteralPath $Path)) {
+        $lineNo++
+        $line = $rawLine.Trim()
+        if (-not $line) { continue }
+
+        if ($line.StartsWith('#')) {
+            $mode = Get-SectionMode -Comment $line.TrimStart('#')
+            if ($mode) {
+                $section = @{}
+                foreach ($k in $mode.Keys) { $section[$k] = $mode[$k] }
+            }
+            continue
+        }
+
+        # Commentaar achter de URL ("... -s  # favoriet"); een # in de URL zelf
+        # heeft geen spatie ervoor en blijft dus staan.
+        $line = [regex]::Replace($line, '\s+#.*$', '')
+
+        $tokens = @(Split-OptionTokens -Text $line)
+        if ($tokens.Count -eq 0) { continue }
+
+        $url = $tokens[0]
+        $opts = @{}
+        foreach ($k in $section.Keys) { $opts[$k] = $section[$k] }
+
+        if ($tokens.Count -gt 1) {
+            $lineOpts = ConvertTo-LineOptions -Tokens $tokens[1..($tokens.Count - 1)] -LineNo $lineNo
+            foreach ($k in $lineOpts.Keys) { $opts[$k] = $lineOpts[$k] }
+        }
+
+        $null = $jobs.Add([pscustomobject]@{ Url = $url; Options = $opts; Line = $lineNo })
+    }
+
+    return $jobs
 }
 
 # ============================================
@@ -1111,23 +1334,20 @@ function Invoke-DownloadUrl {
 }
 
 # ============================================
-# URL-lijst opbouwen (enkele URL en/of batch-bestand)
+# Takenlijst opbouwen (enkele URL en/of batch-bestand)
 # ============================================
-$urls = [System.Collections.Generic.List[string]]::new()
-if ($Url) { $urls.Add($Url) }
+$jobs = [System.Collections.Generic.List[object]]::new()
+if ($Url) { $null = $jobs.Add([pscustomobject]@{ Url = $Url; Options = @{}; Line = 0 }) }
 if ($BatchFile) {
     if (-not (Test-Path $BatchFile)) {
         Write-Host "[ERROR] Batch-bestand niet gevonden: $BatchFile" -ForegroundColor Red
         if ($LogFile) { Stop-Transcript }
         exit 1
     }
-    Get-Content -Path $BatchFile | ForEach-Object {
-        $line = $_.Trim()
-        if ($line -and -not $line.StartsWith('#')) { $urls.Add($line) }
-    }
+    foreach ($job in (Read-BatchFile -Path $BatchFile)) { $null = $jobs.Add($job) }
 }
 
-if ($urls.Count -eq 0) {
+if ($jobs.Count -eq 0) {
     Write-Host "[ERROR] Geen URL opgegeven. Gebruik -Url <URL> of -BatchFile <bestand>." -ForegroundColor Red
     Write-Host "        Help: ydm -h" -ForegroundColor Yellow
     if ($LogFile) { Stop-Transcript }
@@ -1135,7 +1355,7 @@ if ($urls.Count -eq 0) {
 }
 
 if ($BatchFile -and $OutputDir) {
-    Write-Host "[WARN] -OutputDir wordt genegeerd in batch-modus; elk album krijgt een eigen map onder -BaseDir." -ForegroundColor Yellow
+    Write-Host "[WARN] -OutputDir geldt niet voor een hele lijst; zet er per regel een -o achter als je dat wil." -ForegroundColor Yellow
 }
 
 # ============================================
@@ -1146,38 +1366,43 @@ $failedUrls = [System.Collections.Generic.List[string]]::new()
 $idx = 0
 
 try {
-    foreach ($currentUrl in $urls) {
+    foreach ($job in $jobs) {
         $idx++
 
-        if ($urls.Count -gt 1) {
+        # Opties van deze regel klaarzetten; de volgende regel begint weer bij
+        # wat er op de commandline stond.
+        Set-RunOptions -Override $job.Options
+
+        if ($jobs.Count -gt 1) {
             Write-Host ""
             Write-Host "############################################" -ForegroundColor Magenta
-            Write-Host "# [$idx/$($urls.Count)] $currentUrl" -ForegroundColor Magenta
+            Write-Host "# [$idx/$($jobs.Count)] $($job.Url)  ($(Get-ModeLabel))" -ForegroundColor Magenta
             Write-Host "############################################" -ForegroundColor Magenta
         }
 
-        if ($currentUrl -notmatch '^https?://') {
-            Write-Host "[ERROR] Ongeldige URL overgeslagen: $currentUrl" -ForegroundColor Red
-            $failedUrls.Add($currentUrl)
+        if ($job.Url -notmatch '^https?://') {
+            Write-Host "[ERROR] Ongeldige URL overgeslagen: $($job.Url)" -ForegroundColor Red
+            $failedUrls.Add($job.Url)
             continue
         }
 
-        $outOverride = if ($urls.Count -gt 1) { $null } else { $OutputDir }
+        # Een -o op de regel zelf telt altijd; de globale -o alleen bij één URL
+        $outOverride = if ($job.Options.ContainsKey('OutputDir') -or $jobs.Count -eq 1) { $OutputDir } else { $null }
 
         try {
-            Invoke-DownloadUrl -TargetUrl $currentUrl -OutDirOverride $outOverride
+            Invoke-DownloadUrl -TargetUrl $job.Url -OutDirOverride $outOverride
         }
         catch {
             Write-Host ""
-            Write-Host "[ERROR] $currentUrl : $_" -ForegroundColor Red
-            $failedUrls.Add($currentUrl)
+            Write-Host "[ERROR] $($job.Url) : $_" -ForegroundColor Red
+            $failedUrls.Add($job.Url)
         }
     }
 
-    if ($urls.Count -gt 1) {
+    if ($jobs.Count -gt 1) {
         Write-Host ""
-        $ok = $urls.Count - $failedUrls.Count
-        Write-Host "=== Batch klaar: $ok/$($urls.Count) URL's gelukt ===" -ForegroundColor Green
+        $ok = $jobs.Count - $failedUrls.Count
+        Write-Host "=== Batch klaar: $ok/$($jobs.Count) URL's gelukt ===" -ForegroundColor Green
         if ($failedUrls.Count -gt 0) {
             Write-Host "Mislukt:" -ForegroundColor Red
             $failedUrls | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }

@@ -1,0 +1,28 @@
+# Voorbeeld-lijst voor ydm.ps1:  ydm -f ydm.example.txt
+#
+# Een kopregel zet de modus voor alles eronder. Herkend worden:
+#   # Music / Muziek / Songs / Albums
+#   # Podcasts / Shows / Afleveringen
+#   # Audiobooks / Luisterboeken / Hoorboeken / Boeken
+# Een #-regel die geen sectienaam is, is gewoon commentaar.
+#
+# Achter een URL mag je dezelfde opties zetten als op de commandline; die
+# gelden alleen voor die regel en gaan voor de sectie:
+#   -s          splitsen op chapters
+#   -ab -pc -m  luisterboek / podcast / muziek
+#   -q 320      bitrate       -x m4a   formaat      -i "1-10"  selectie
+#   -c -a -n -k -r            -b <map> -o <map>
+#   -Artist "..."  -Album "..."
+
+# Music
+https://www.youtube.com/playlist?list=PLHyRBPzaNWTma3XcBD2xbpxRzctC2K028
+https://www.youtube.com/watch?v=aqz-KE-bpKQ -q 320
+https://www.youtube.com/watch?v=aqz-KE-bpKQ -s -c          # album opknippen
+
+# Podcasts
+https://www.youtube.com/@freecodecamp/videos -i "1-5"
+https://www.youtube.com/watch?v=aqz-KE-bpKQ -s             # deze wel in stukken
+
+# Audiobooks
+https://www.youtube.com/watch?v=aqz-KE-bpKQ
+https://www.youtube.com/watch?v=aqz-KE-bpKQ -Artist "Frank Herbert" -Album "Dune"
