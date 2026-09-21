@@ -266,6 +266,10 @@ function Set-RunOptions {
 
     # Presets: alleen de standaardmap en een paar defaults. Een eigen -BaseDir
     # (op de commandline of op de regel zelf) gaat er altijd voor.
+    # Onthouden of -s echt gevraagd is: bij -ab zetten we hem zelf aan, en dan
+    # hoeft er geen "wordt genegeerd" over een playlist gemeld te worden.
+    $script:SplitExplicit = $script:Split
+
     $script:genre = $null
     $script:BaseDir = [string]$o.BaseDir
     if ($script:Audiobook) {
@@ -305,6 +309,16 @@ function Get-SafeFileName {
     if (-not $clean) { $clean = "track" }
     if ($clean.Length -gt 120) { $clean = $clean.Substring(0, 120).Trim() }
     return $clean
+}
+
+# <artiest>\<album>, maar één map als die twee hetzelfde heten - dat gebeurt bij
+# een channel-upload waar de playlist naar het kanaal vernoemd is.
+function Join-ArtistAlbumDir {
+    param([string]$Base, [string]$ArtistName, [string]$AlbumTitle)
+    $a = Get-SafeDirName -Name $ArtistName
+    $b = Get-SafeDirName -Name $AlbumTitle
+    if (-not $b -or $a -eq $b) { return (Join-Path $Base $a) }
+    return (Join-Path $Base ($a + "\" + $b))
 }
 
 # ffmpeg wil een punt als decimaalteken, ongeacht de locale van de shell
@@ -893,7 +907,7 @@ function Invoke-DownloadTrack {
     $OutDir = if ($OutDirOverride) {
         $OutDirOverride
     } elseif ($doSplit) {
-        Join-Path $BaseDir ((Get-SafeDirName -Name $trackArtist) + "\" + (Get-SafeDirName -Name $albumName))
+        Join-ArtistAlbumDir -Base $BaseDir -ArtistName $trackArtist -AlbumTitle $albumName
     } else {
         Join-Path $BaseDir (Get-SafeDirName -Name $trackArtist)
     }
@@ -1162,7 +1176,7 @@ function Invoke-DownloadAlbum {
     $OutDir = if ($OutDirOverride) {
         $OutDirOverride
     } else {
-        Join-Path $BaseDir ((Get-SafeDirName -Name $albumArtist) + "\" + (Get-SafeDirName -Name $albumName))
+        Join-ArtistAlbumDir -Base $BaseDir -ArtistName $albumArtist -AlbumTitle $albumName
     }
 
     # --------------------------------------------
@@ -1302,10 +1316,21 @@ function Invoke-DownloadUrl {
 
     $entries = [System.Collections.Generic.List[object]]::new()
     $pos = 0
+    $unavailable = 0
     foreach ($line in $lines) {
         $pos++
         $f = $line -split $sep
         if ($f.Count -lt 5) { continue }
+
+        $title = ($f[4..($f.Count - 1)] -join $sep)
+
+        # Privé, verwijderd of region-locked: yt-dlp geeft dan "NA" terug. Die
+        # eruit filteren scheelt een reeks mislukte downloads.
+        if (-not $f[1] -or $f[1] -eq 'NA' -or -not $title -or $title -eq 'NA') {
+            $unavailable++
+            continue
+        }
+
         $idx = 0
         if (-not [int]::TryParse($f[0], [ref]$idx)) { $idx = $pos }
         $null = $entries.Add([pscustomobject]@{
@@ -1313,8 +1338,12 @@ function Invoke-DownloadUrl {
             Id       = $f[1]
             Channel  = $f[2]
             Playlist = $f[3]
-            Title    = ($f[4..($f.Count - 1)] -join $sep)
+            Title    = $title
         })
+    }
+
+    if ($unavailable -gt 0) {
+        Write-Host "[i] $unavailable niet-beschikbare video('s) overgeslagen" -ForegroundColor DarkGray
     }
 
     if ($entries.Count -eq 0) { throw "Geen bruikbare video's gevonden" }
@@ -1326,7 +1355,7 @@ function Invoke-DownloadUrl {
         return
     }
 
-    if ($Split) {
+    if ($SplitExplicit) {
         Write-Host "[WARN] -s geldt alleen voor losse video's; voor een playlist wordt het genegeerd." -ForegroundColor Yellow
     }
 
