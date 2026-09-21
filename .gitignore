@@ -19,3 +19,7 @@ meta.json
 
 # Logs
 *.log
+
+# Cookies zijn inloggegevens
+cookies.txt
+*cookies*.txt

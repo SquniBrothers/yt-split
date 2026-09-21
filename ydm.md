@@ -77,6 +77,7 @@ Output: C:\Users\User\music\Pink_Floyd\The_Wall
 - [Presets: `-ab` en `-pc`](#presets--ab-en--pc)
 - [Lange video's splitsen (`-s`)](#lange-videos-splitsen--s)
   - [Hoofdstukken bewaren en later splitsen](#hoofdstukken-bewaren-en-later-splitsen)
+- [Cookies](#cookies)
 - [Album art](#album-art)
 - [Tags](#tags)
 - [Titels opschonen](#titels-opschonen)
@@ -121,6 +122,7 @@ Set-Alias ydm ytmusic
 | `-Format` | `-x` | string | `mp3` | `mp3` of `m4a` |
 | `-Split` | `-s` | switch | — | Lange video opknippen in de chapters |
 | `-ChapterFile` | `-ch` | string | — | Hoofdstukken uit een JSON-bestand, zie [hieronder](#hoofdstukken-bewaren-en-later-splitsen) |
+| `-Cookies` | `-ck` | string | — | Browsernaam of pad naar `cookies.txt`, zie [cookies](#cookies) |
 | `-Audiobook` | `-ab` | switch | — | Luisterboek-preset, zie [presets](#presets--ab-en--pc) |
 | `-Podcast` | `-pc` | switch | — | Podcast-preset, zie [presets](#presets--ab-en--pc) |
 | `-NoArt` | `-a` | switch | — | Geen album art insluiten |
@@ -253,6 +255,51 @@ Bron: The Sayings of Kings and Commanders.mp3 (al aanwezig, niet opnieuw gedownl
 
 Zo kun je eerst binnenhalen en later pas splitsen, en uitproberen welke indeling je
 bevalt.
+
+## Cookies
+
+YouTube knijpt anonieme downloads af zodra je er wat meer achter elkaar doet. Je merkt het
+hieraan: minder formats dan normaal, geen chapters meer, soms een lege beschrijving, en af
+en toe een `HTTP Error 403`. Een ingelogde sessie haalt die rem eraf. Daarnaast heb je
+cookies nodig voor video's achter een login of een kanaallidmaatschap:
+
+```
+ERROR: [youtube] This video is available to this channel's members on level: ...
+```
+
+`-Cookies` (`-ck`) neemt allebei de vormen die yt-dlp kent, en kiest zelf de juiste:
+
+```powershell
+# rechtstreeks uit je browser
+ydm "https://www.youtube.com/watch?v=..." -ck chrome
+ydm "https://www.youtube.com/watch?v=..." -ck firefox
+ydm "https://www.youtube.com/watch?v=..." -ck "chrome:Profile 1"
+
+# of uit een geëxporteerde cookies.txt (Netscape-formaat)
+ydm "https://www.youtube.com/watch?v=..." -ck "C:\pad\cookies.txt"
+```
+
+Bestaat de waarde als bestand, dan wordt het `--cookies`; is het een van de browsers die
+yt-dlp kent (`brave`, `chrome`, `chromium`, `edge`, `firefox`, `opera`, `safari`,
+`vivaldi`, `whale`), dan wordt het `--cookies-from-browser`. Iets anders levert een
+waarschuwing op en wordt genegeerd — je download gaat dan gewoon anoniem door.
+
+De cookies gaan mee in élke aanroep van yt-dlp: het ophalen van de playlist, de selectie
+met `-i`, de metadata én de download zelf. In een batch-bestand kan het per regel:
+
+```
+# Audiobooks
+https://www.youtube.com/watch?v=... -ck chrome
+```
+
+Twee dingen om te weten:
+
+- **Chrome-achtige browsers houden hun cookiedatabase op slot** zolang ze draaien. Krijg
+  je `Could not copy Chrome cookie database`, sluit de browser dan even, of exporteer een
+  `cookies.txt`.
+- **Cookies zijn inloggegevens.** Een `cookies.txt` geeft toegang tot je account; behandel
+  het bestand als een wachtwoord en zet het niet in een repo. De `.gitignore` van deze
+  repo sluit `cookies.txt` daarom uit.
 
 ## Album art
 

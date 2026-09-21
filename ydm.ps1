@@ -40,6 +40,11 @@ param(
     [Parameter(Mandatory = $false)]
     [string]$ChapterFile,
 
+    # Browsernaam (chrome, firefox, edge, ...) of pad naar een cookies.txt
+    [Alias("ck")]
+    [Parameter(Mandatory = $false)]
+    [string]$Cookies,
+
     [Alias("ab")]
     [Parameter(Mandatory = $false)]
     [switch]$Audiobook,
@@ -130,6 +135,11 @@ PARAMETERS:
                       Neemt zowel een kale lijst als de uitvoer van yt-dlp --dump-json.
                       De gebruikte hoofdstukken worden altijd als chapters.json naast
                       de tracks bewaard, zodat je later opnieuw kunt splitsen.
+    -Cookies  (-ck)  Cookies meesturen: een browsernaam (chrome, firefox, edge, brave,
+                      chromium, opera, safari, vivaldi, whale) of een pad naar een
+                      cookies.txt. Nodig voor video's achter een login of een kanaal-
+                      lidmaatschap, en het haalt de rem van YouTube af bij veel
+                      downloads achter elkaar (anders: minder formats, geen chapters).
     -Audiobook  (-ab)  Luisterboek: naar `$HOME\Audiobooks, -s automatisch aan, genre Audiobook
     -Podcast  (-pc)  Podcast: naar `$HOME\Podcasts, datum voor de bestandsnaam, genre Podcast
     -NoArt  (-a)  Geen album art insluiten
@@ -166,6 +176,7 @@ if ($Audiobook -and $Podcast) {
 $BaseOptions = @{
     Split           = [bool]$Split
     ChapterFile     = $ChapterFile
+    Cookies         = $Cookies
     Audiobook       = [bool]$Audiobook
     Podcast         = [bool]$Podcast
     Crop            = [bool]$Crop
@@ -230,6 +241,34 @@ $CacheRoot = Join-Path ([System.IO.Path]::GetTempPath()) "ydm"
 $ValidQuality = @('++', '+', '-', '--', '320', '256', '192', '128', '96')
 $ValidFormat  = @('mp3', 'm4a')
 
+# Browsers waar yt-dlp de cookies rechtstreeks uit kan lezen
+$KnownBrowsers = @('brave', 'chrome', 'chromium', 'edge', 'firefox', 'opera', 'safari', 'vivaldi', 'whale')
+
+# ============================================
+# Cookies
+# YouTube knijpt anonieme downloads af zodra je er wat meer achter elkaar doet:
+# minder formats, geen chapters, en members-only video's blijven dicht. Met een
+# ingelogde sessie is dat weg.
+#
+# -Cookies neemt een browsernaam (chrome, firefox, ...) of een pad naar een
+# cookies.txt in Netscape-formaat, en kiest zelf de juiste yt-dlp optie.
+# ============================================
+function Resolve-CookieArgs {
+    param([string]$Value)
+
+    if (-not $Value) { return @() }
+
+    if (Test-Path -LiteralPath $Value) { return @('--cookies', $Value) }
+
+    # "chrome", maar ook "chrome:Profile 1" en "firefox+gnomekeyring"
+    $browser = (($Value -split '[:+]')[0]).Trim().ToLowerInvariant()
+    if ($browser -in $KnownBrowsers) { return @('--cookies-from-browser', $Value) }
+
+    Write-Host "[WARN] -Cookies '$Value' is geen bestaand bestand en geen bekende browser;" -ForegroundColor Yellow
+    Write-Host "       kies uit $($KnownBrowsers -join ', ') of geef een pad naar cookies.txt. Genegeerd." -ForegroundColor Yellow
+    return @()
+}
+
 # ============================================
 # Opties voor één URL klaarzetten
 # De basis is de commandline; $Override komt uit een regel van het batch-bestand.
@@ -245,6 +284,8 @@ function Set-RunOptions {
 
     $script:Split       = [bool]$o.Split
     $script:ChapterFile = [string]$o.ChapterFile
+    $script:Cookies     = [string]$o.Cookies
+    $script:cookieArgs  = @(Resolve-CookieArgs -Value $script:Cookies)
     $script:Audiobook = [bool]$o.Audiobook
     $script:Podcast   = [bool]$o.Podcast
     $script:Crop      = [bool]$o.Crop
@@ -642,6 +683,7 @@ $ValueFlags = @{
     'o' = 'OutputDir'; 'outputdir' = 'OutputDir'
     'artist' = 'Artist'; 'album' = 'Album'
     'ch' = 'ChapterFile'; 'chapters' = 'ChapterFile'; 'chapterfile' = 'ChapterFile'
+    'ck' = 'Cookies'; 'cookies' = 'Cookies'
 }
 $SwitchFlags = @{
     's' = 'Split';    'split'    = 'Split'
@@ -796,6 +838,7 @@ function Get-AudioSource {
     & yt-dlp `
         --no-playlist `
         -f 'bestaudio/best' `
+        @cookieArgs `
         --force-ipv4 `
         --retries infinite `
         --fragment-retries infinite `
@@ -916,7 +959,7 @@ function Invoke-DownloadTrack {
     Write-Host ""
     Write-Host "=== Metadata ophalen ===" -ForegroundColor Cyan
 
-    $meta = & yt-dlp @jsRuntimeArgs --no-playlist --dump-json $VideoUrl | ConvertFrom-Json
+    $meta = & yt-dlp @jsRuntimeArgs @cookieArgs --no-playlist --dump-json $VideoUrl | ConvertFrom-Json
     if (-not $meta) { throw "Kon metadata niet ophalen" }
 
     $channel = if ($meta.channel) { "$($meta.channel)" }
@@ -1364,7 +1407,7 @@ function Invoke-DownloadAlbum {
     # --------------------------------------------
     $selected = @($Entries)
     if ($Items) {
-        $ids = @(& yt-dlp @jsRuntimeArgs --flat-playlist --ignore-no-formats-error `
+        $ids = @(& yt-dlp @jsRuntimeArgs @cookieArgs --flat-playlist --ignore-no-formats-error `
                     --playlist-items $Items --print "%(id)s" $ListUrl | Where-Object { $_ })
         if ($ids.Count -eq 0) { throw "Selectie '$Items' levert geen video's op" }
         $wanted = @{}
@@ -1515,7 +1558,7 @@ function Invoke-DownloadUrl {
     # uit alle titels, ook als er met -Items maar een paar nummers gehaald worden.
     $listArgs = @('--flat-playlist', '--ignore-no-formats-error', '--print', $template)
 
-    $lines = @(& yt-dlp @jsRuntimeArgs @listArgs $TargetUrl | Where-Object { $_ -and $_.Contains($sep) })
+    $lines = @(& yt-dlp @jsRuntimeArgs @cookieArgs @listArgs $TargetUrl | Where-Object { $_ -and $_.Contains($sep) })
     if ($LASTEXITCODE -ne 0 -and $lines.Count -eq 0) { throw "Kon playlist niet ophalen" }
     if ($lines.Count -eq 0) { throw "Geen video's gevonden" }
 
