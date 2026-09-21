@@ -667,6 +667,8 @@ function Get-AudioSource {
 
     $thumbArgs = if ($NoArt) { @() } else { @('--write-thumbnail', '--convert-thumbnail', 'jpg') }
 
+    # Out-Host, niet zomaar laten lopen: de voortgang van yt-dlp hoort op het
+    # scherm, niet in de returnwaarde van deze functie.
     & yt-dlp `
         --no-playlist `
         -f 'bestaudio/best' `
@@ -679,7 +681,7 @@ function Get-AudioSource {
         --write-info-json `
         --no-part `
         -o (Join-Path $WorkDir 'src.%(ext)s') `
-        $VideoUrl
+        $VideoUrl | Out-Host
 
     if ($LASTEXITCODE -ne 0) { return $null }
 
@@ -759,7 +761,7 @@ function Convert-Audio {
 
     $ff += @($Dest)
 
-    & ffmpeg @ff
+    & ffmpeg @ff | Out-Host
     return ($LASTEXITCODE -eq 0)
 }
 
@@ -993,7 +995,7 @@ function Invoke-DownloadTrack {
 
     $workDir = Join-Path $CacheRoot "$($meta.id)"
     $src = Get-AudioSource -VideoUrl $watchUrl -WorkDir $workDir
-    if (-not $src) { Remove-WorkDir $workDir; throw "Download gefaald" }
+    if (-not $src -or -not $src.Audio) { Remove-WorkDir $workDir; throw "Download gefaald" }
 
     if (-not $year) { $year = Get-Year -Info $src.Info }
 
@@ -1240,7 +1242,7 @@ function Invoke-DownloadAlbum {
         $workDir  = Join-Path $CacheRoot "$($e.Id)"
 
         $src = Get-AudioSource -VideoUrl $watchUrl -WorkDir $workDir
-        if (-not $src) {
+        if (-not $src -or -not $src.Audio) {
             Write-Host "  [ERROR] Download gefaald: $($e.File)" -ForegroundColor Red
             $null = $failed.Add($e.File)
             Remove-WorkDir $workDir
