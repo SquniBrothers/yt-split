@@ -36,6 +36,10 @@ param(
     [Parameter(Mandatory = $false)]
     [switch]$Split,
 
+    [Alias("ch")]
+    [Parameter(Mandatory = $false)]
+    [string]$ChapterFile,
+
     [Alias("ab")]
     [Parameter(Mandatory = $false)]
     [switch]$Audiobook,
@@ -122,6 +126,10 @@ PARAMETERS:
                     gebruik -q:"--" (met dubbele punt) of -q 96
     -Format  (-x)  Audioformaat: mp3 (default) of m4a
     -Split  (-s)  Lange video opknippen in de chapters (losse track per hoofdstuk)
+    -ChapterFile  (-ch)  Hoofdstukken uit een JSON-bestand i.p.v. van YouTube.
+                      Neemt zowel een kale lijst als de uitvoer van yt-dlp --dump-json.
+                      De gebruikte hoofdstukken worden altijd als chapters.json naast
+                      de tracks bewaard, zodat je later opnieuw kunt splitsen.
     -Audiobook  (-ab)  Luisterboek: naar `$HOME\Audiobooks, -s automatisch aan, genre Audiobook
     -Podcast  (-pc)  Podcast: naar `$HOME\Podcasts, datum voor de bestandsnaam, genre Podcast
     -NoArt  (-a)  Geen album art insluiten
@@ -157,6 +165,7 @@ if ($Audiobook -and $Podcast) {
 # overheen (zie Set-RunOptions en Read-BatchFile).
 $BaseOptions = @{
     Split           = [bool]$Split
+    ChapterFile     = $ChapterFile
     Audiobook       = [bool]$Audiobook
     Podcast         = [bool]$Podcast
     Crop            = [bool]$Crop
@@ -234,7 +243,8 @@ function Set-RunOptions {
     foreach ($k in $BaseOptions.Keys)  { $o[$k] = $BaseOptions[$k] }
     foreach ($k in $Override.Keys)     { $o[$k] = $Override[$k] }
 
-    $script:Split     = [bool]$o.Split
+    $script:Split       = [bool]$o.Split
+    $script:ChapterFile = [string]$o.ChapterFile
     $script:Audiobook = [bool]$o.Audiobook
     $script:Podcast   = [bool]$o.Podcast
     $script:Crop      = [bool]$o.Crop
@@ -428,6 +438,118 @@ function ConvertFrom-Timestamp {
     return $secs
 }
 
+# ============================================
+# Chapters uit een JSON-bestand
+# Slikt zowel een kale lijst [{start_time,end_time,title}, ...] als de complete
+# uitvoer van "yt-dlp --dump-json" (dan wordt .chapters eruit gehaald).
+# ============================================
+function Import-ChapterFile {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        Write-Host "[WARN] Chapter-bestand niet gevonden: $Path" -ForegroundColor Yellow
+        return @()
+    }
+
+    try {
+        $data = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+    } catch {
+        Write-Host "[WARN] Chapter-bestand is geen geldige JSON: $Path" -ForegroundColor Yellow
+        return @()
+    }
+
+    # Alleen uitpakken bij de complete uitvoer van yt-dlp --dump-json. Let op:
+    # "$data.chapters" op een array levert een lijst met net zoveel $null's op,
+    # en die is truthy - dus expliciet op het ene object controleren.
+    if ($data -is [System.Management.Automation.PSCustomObject] -and
+        ($data.PSObject.Properties.Name -contains 'chapters')) {
+        $data = $data.chapters
+    }
+
+    $out = [System.Collections.Generic.List[object]]::new()
+    foreach ($c in @($data)) {
+        if ($null -eq $c.start_time) { continue }
+        $null = $out.Add([pscustomobject]@{
+            start_time = [double]$c.start_time
+            end_time   = if ($null -ne $c.end_time) { [double]$c.end_time } else { 0 }
+            title      = "$($c.title)"
+        })
+    }
+
+    if ($out.Count -lt 2) {
+        Write-Host "[WARN] Chapter-bestand bevat minder dan 2 hoofdstukken: $Path" -ForegroundColor Yellow
+        return @()
+    }
+    return @($out)
+}
+
+# ============================================
+# Chapters uit de watch-pagina
+#
+# YouTube geeft de chapters niet altijd mee in de player-API waar yt-dlp uit
+# leest - vooral niet als je veel achter elkaar downloadt. De watch-pagina heeft
+# ze meestal wel, maar ook die is wisselvallig: dezelfde URL levert de ene keer
+# de markers en de andere keer niets. Vandaar een paar pogingen.
+# ============================================
+function Get-ChaptersFromPage {
+    param(
+        [Parameter(Mandatory = $true)][string]$VideoId,
+        [double]$Duration,
+        [int]$Tries = 4
+    )
+
+    $ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
+    $headers = @{ 'Accept-Language' = 'en-US,en;q=0.9'; 'Cookie' = 'SOCS=CAI' }
+    $markers = @()
+
+    for ($i = 1; $i -le $Tries; $i++) {
+        try {
+            $resp = Invoke-WebRequest -Uri "https://www.youtube.com/watch?v=$VideoId" `
+                        -UserAgent $ua -Headers $headers -UseBasicParsing -TimeoutSec 60
+        } catch {
+            continue
+        }
+
+        $html = $resp.Content
+        $found = [System.Collections.Generic.List[object]]::new()
+
+        # Markers in de balk onder de video
+        foreach ($m in [regex]::Matches($html, '"title":\{"simpleText":"((?:[^"\\]|\\.)*)"\},"timeRangeStartMillis":(\d+)')) {
+            $null = $found.Add([pscustomobject]@{ Title = $m.Groups[1].Value; Seconds = [double]$m.Groups[2].Value / 1000 })
+        }
+
+        # Anders de lijst uit het chapters-paneel ("1:23  Titel")
+        if ($found.Count -lt 2) {
+            foreach ($m in [regex]::Matches($html, '"macroMarkersListItemRenderer":\{"title":\{"simpleText":"((?:[^"\\]|\\.)*)"\},"timeDescription":\{"simpleText":"(\d{1,2}:\d{1,2}(?::\d{2})?)"\}')) {
+                $secs = ConvertFrom-Timestamp -Text $m.Groups[2].Value
+                if ($secs -ge 0) {
+                    $null = $found.Add([pscustomobject]@{ Title = $m.Groups[1].Value; Seconds = $secs })
+                }
+            }
+        }
+
+        $markers = @($found | Where-Object { $_.Title } | Sort-Object Seconds -Unique)
+        if ($markers.Count -ge 2) { break }
+    }
+
+    if ($markers.Count -lt 2) { return @() }
+
+    $result = [System.Collections.Generic.List[object]]::new()
+    for ($i = 0; $i -lt $markers.Count; $i++) {
+        $start = [double]$markers[$i].Seconds
+        $end = if ($i -lt $markers.Count - 1) { [double]$markers[$i + 1].Seconds } else { $Duration }
+        if ($end -le $start) { continue }
+        $null = $result.Add([pscustomobject]@{
+            start_time = $start
+            end_time   = $end
+            title      = [regex]::Unescape($markers[$i].Title)
+        })
+    }
+
+    if ($result.Count -lt 2) { return @() }
+    return @($result)
+}
+
 function Get-ChaptersFromDescription {
     param([string]$Description, [double]$Duration)
 
@@ -519,6 +641,7 @@ $ValueFlags = @{
     'b' = 'BaseDir'; 'basedir' = 'BaseDir'
     'o' = 'OutputDir'; 'outputdir' = 'OutputDir'
     'artist' = 'Artist'; 'album' = 'Album'
+    'ch' = 'ChapterFile'; 'chapters' = 'ChapterFile'; 'chapterfile' = 'ChapterFile'
 }
 $SwitchFlags = @{
     's' = 'Split';    'split'    = 'Split'
@@ -723,10 +846,16 @@ function Convert-Audio {
         [string]$Cover,
         [double]$Start = -1,
         [double]$Length = -1,
-        [hashtable]$Tags = @{}
+        [hashtable]$Tags = @{},
+        # Bron is al een afgerond bestand in het doelformaat: alleen knippen,
+        # niet opnieuw encoden.
+        [switch]$FromFinished
     )
 
     $useCover = (-not $NoArt) -and $Cover -and (Test-Path -LiteralPath $Cover)
+    # Bij een al afgerond bronbestand zit de album art er zelf in; "0:v?" pakt
+    # hem mee als hij er is en doet niets als hij ontbreekt.
+    $keepEmbedded = $FromFinished -and -not $useCover -and -not $NoArt
 
     $ff = @('-y', '-hide_banner', '-loglevel', 'error', '-nostats')
 
@@ -736,10 +865,16 @@ function Convert-Audio {
     if ($useCover) { $ff += @('-i', $Cover) }
 
     $ff += @('-map', '0:a:0')
-    if ($useCover) { $ff += @('-map', '1:v:0') }
+    if ($useCover)         { $ff += @('-map', '1:v:0') }
+    elseif ($keepEmbedded) { $ff += @('-map', '0:v?') }
     if ($Length -gt 0) { $ff += @('-t', (Format-Seconds $Length)) }
 
-    $ff += @('-c:a', $audioCodec, '-b:a', "${bitrate}k")
+    if ($FromFinished) {
+        # Knippen zonder opnieuw te encoden: scheelt tijd en kwaliteitsverlies
+        $ff += @('-c:a', 'copy')
+    } else {
+        $ff += @('-c:a', $audioCodec, '-b:a', "${bitrate}k")
+    }
 
     if ($useCover) {
         if ($Crop) {
@@ -750,6 +885,9 @@ function Convert-Audio {
         }
         $ff += @('-disposition:v:0', 'attached_pic')
         $ff += @('-metadata:s:v', 'title=Album cover', '-metadata:s:v', 'comment=Cover (front)')
+    }
+    elseif ($keepEmbedded) {
+        $ff += @('-c:v', 'copy', '-disposition:v:0', 'attached_pic')
     }
 
     # id3v2.3 i.p.v. 2.4: Windows Verkenner en oudere spelers lezen alleen die
@@ -797,16 +935,45 @@ function Invoke-DownloadTrack {
     # --------------------------------------------
     # Chapters
     # --------------------------------------------
+    $dur = if ($meta.duration) { [double]$meta.duration } else { 0 }
     $chapters = @()
-    if ($meta.chapters) { $chapters = @($meta.chapters) }
-    $fromDescription = $false
+    $chapterSource = 'chapters'
 
+    # 1. Een meegegeven JSON-bestand wint altijd
+    if ($ChapterFile) {
+        $chapters = @(Import-ChapterFile -Path $ChapterFile)
+        if ($chapters.Count -ge 2) {
+            $chapterSource = 'uit ' + (Split-Path -Leaf $ChapterFile)
+            Write-Host "[i] $($chapters.Count) hoofdstukken uit $ChapterFile" -ForegroundColor DarkCyan
+        }
+    }
+
+    # 2. Wat yt-dlp zelf meekreeg
+    if ($chapters.Count -lt 2 -and $meta.chapters) { $chapters = @($meta.chapters) }
+
+    # 3. De watch-pagina; yt-dlp mist de markers geregeld als je veel downloadt
     if ($Split -and $chapters.Count -lt 2) {
-        $dur = if ($meta.duration) { [double]$meta.duration } else { 0 }
+        Write-Host "[i] Geen chapters via yt-dlp; watch-pagina proberen..." -ForegroundColor DarkGray
+        $chapters = @(Get-ChaptersFromPage -VideoId "$($meta.id)" -Duration $dur)
+        if ($chapters.Count -ge 2) {
+            $chapterSource = 'van de watch-pagina'
+            Write-Host "[i] $($chapters.Count) hoofdstukken van de watch-pagina" -ForegroundColor DarkCyan
+        }
+    }
+
+    # 4. Een tracklist in de beschrijving
+    if ($Split -and $chapters.Count -lt 2) {
         $chapters = @(Get-ChaptersFromDescription -Description "$($meta.description)" -Duration $dur)
         if ($chapters.Count -ge 2) {
-            $fromDescription = $true
-            Write-Host "[i] Geen chapters op YouTube; $($chapters.Count) tracks uit de beschrijving gelezen" -ForegroundColor DarkCyan
+            $chapterSource = 'uit de beschrijving'
+            Write-Host "[i] $($chapters.Count) tracks uit de beschrijving gelezen" -ForegroundColor DarkCyan
+        }
+    }
+
+    # Een laatste hoofdstuk zonder eindtijd loopt door tot het eind
+    foreach ($c in $chapters) {
+        if (-not $c.end_time -or [double]$c.end_time -le [double]$c.start_time) {
+            if ($dur -gt [double]$c.start_time) { $c.end_time = $dur }
         }
     }
 
@@ -972,8 +1139,7 @@ function Invoke-DownloadTrack {
         Write-Host "Map    : $OutDir"
         Write-Host "Artiest: $trackArtist"
         if ($doSplit) {
-            $bron = if ($fromDescription) { 'uit de beschrijving' } else { 'chapters' }
-            Write-Host "Album  : $albumName ($bron)"
+            Write-Host "Album  : $albumName ($chapterSource)"
         }
         if ($year) { Write-Host "Jaar   : $year" }
         Write-Host ""
@@ -1001,9 +1167,37 @@ function Invoke-DownloadTrack {
     Write-Host "Map: $OutDir" -ForegroundColor DarkGray
     Write-Host ""
 
+    # Chapters bewaren zodra we ze hebben: YouTube geeft ze lang niet altijd, en
+    # met dit bestand kun je later opnieuw splitsen zonder ervan afhankelijk te
+    # zijn (ydm ... -ch chapters.json).
+    if ($doSplit) {
+        $chapterOut = Join-Path $OutDir "chapters.json"
+        if (-not (Test-Path -LiteralPath $chapterOut)) {
+            @($chapterPlan | ForEach-Object {
+                [pscustomobject]@{
+                    start_time = $_.Start
+                    end_time   = $_.Start + $_.Length
+                    title      = $_.Title
+                }
+            }) | ConvertTo-Json -Depth 5 | Out-File -Encoding utf8 $chapterOut
+        }
+    }
+
+    # Staat het complete bestand er al (van -KeepFull of van een eerdere run
+    # zonder chapters), dan knippen we daaruit in plaats van opnieuw te halen.
+    $fullExisting = Join-Path $OutDir ((Get-SafeFileName -Name $cleanTitle) + $ext)
+    $reuseFull = $doSplit -and (Test-Path -LiteralPath $fullExisting)
+
     $workDir = Join-Path $CacheRoot "$($meta.id)"
-    $src = Get-AudioSource -VideoUrl $watchUrl -WorkDir $workDir
-    if (-not $src -or -not $src.Audio) { Remove-WorkDir $workDir; throw "Download gefaald" }
+
+    if ($reuseFull) {
+        Write-Host "Bron: $(Split-Path -Leaf $fullExisting) (al aanwezig, niet opnieuw gedownload)" -ForegroundColor DarkGray
+        Write-Host ""
+        $src = [pscustomobject]@{ Audio = $fullExisting; Cover = $null; Info = $null }
+    } else {
+        $src = Get-AudioSource -VideoUrl $watchUrl -WorkDir $workDir
+        if (-not $src -or -not $src.Audio) { Remove-WorkDir $workDir; throw "Download gefaald" }
+    }
 
     if (-not $year) { $year = Get-Year -Info $src.Info }
 
@@ -1034,7 +1228,8 @@ function Invoke-DownloadTrack {
         if ($p.Track -gt 0) { $tags['track'] = "$($p.Track)/$($planned.Count)" }
 
         $ok = Convert-Audio -Source $src.Audio -Dest $out -Cover $src.Cover `
-                            -Start $p.Start -Length $p.Length -Tags $tags
+                            -Start $p.Start -Length $p.Length -Tags $tags `
+                            -FromFinished:$reuseFull
         if (-not $ok) {
             Write-Host "  [ERROR] ffmpeg gefaald: $($p.File)" -ForegroundColor Red
             $null = $failed.Add($p.File)

@@ -76,6 +76,7 @@ Output: C:\Users\User\music\Pink_Floyd\The_Wall
 - [Wat wordt wat](#wat-wordt-wat)
 - [Presets: `-ab` en `-pc`](#presets--ab-en--pc)
 - [Lange video's splitsen (`-s`)](#lange-videos-splitsen--s)
+  - [Hoofdstukken bewaren en later splitsen](#hoofdstukken-bewaren-en-later-splitsen)
 - [Album art](#album-art)
 - [Tags](#tags)
 - [Titels opschonen](#titels-opschonen)
@@ -119,6 +120,7 @@ Set-Alias ydm ytmusic
 | `-Quality` | `-q` | string | `+` | Bitrate: `++`/`320`, `256`, `+`/`192`, `-`/`128`, `--`/`96` |
 | `-Format` | `-x` | string | `mp3` | `mp3` of `m4a` |
 | `-Split` | `-s` | switch | — | Lange video opknippen in de chapters |
+| `-ChapterFile` | `-ch` | string | — | Hoofdstukken uit een JSON-bestand, zie [hieronder](#hoofdstukken-bewaren-en-later-splitsen) |
 | `-Audiobook` | `-ab` | switch | — | Luisterboek-preset, zie [presets](#presets--ab-en--pc) |
 | `-Podcast` | `-pc` | switch | — | Podcast-preset, zie [presets](#presets--ab-en--pc) |
 | `-NoArt` | `-a` | switch | — | Geen album art insluiten |
@@ -195,10 +197,15 @@ Met `-s` wordt de audio één keer gedownload en daarna per chapter weggeschreve
 download, geen 26 losse. De chapters komen uit twee bronnen, in deze volgorde:
 
 1. **De chapters van YouTube zelf** (dezelfde die je onder de tijdbalk ziet).
-2. **De tracklist uit de beschrijving**, als YouTube geen chapters heeft. Regels als
-   `0:00 Intro`, `1. 02:30 - Titel`, `[1:05:00] Titel` en `Titel 2:30` worden herkend;
-   er zijn minstens twee tijden nodig. Handig bij album-uploads waar de tijden niet op
-   `0:00` beginnen, want dan maakt YouTube zelf geen chapters.
+2. **De watch-pagina**, als yt-dlp er geen meekreeg. Dat gebeurt regelmatig zodra je veel
+   achter elkaar downloadt: YouTube geeft dan een uitgeklede player-response terug zonder
+   de markers. De pagina zelf heeft ze meestal nog wel, al is ook die wisselvallig —
+   dezelfde URL levert de ene keer wel en de andere keer niets, dus `ydm` probeert het
+   een paar keer.
+3. **De tracklist uit de beschrijving**. Regels als `0:00 Intro`, `1. 02:30 - Titel`,
+   `[1:05:00] Titel` en `Titel 2:30` worden herkend; er zijn minstens twee tijden nodig.
+   Handig bij album-uploads waar de tijden niet op `0:00` beginnen, want dan maakt YouTube
+   zelf geen chapters.
 
 Zonder chapters valt `ydm` terug op één bestand, met een waarschuwing. Andersom: heeft een
 video chapters maar gebruik je `-s` niet, dan zegt `ydm` dat erbij:
@@ -213,6 +220,39 @@ losse tracks ook het complete bestand houden: `-KeepFull`.
 
 Chapternummers die de tracklist zelf al heeft (`01. Sunrise`) verdwijnen — het volgnummer
 komt er zero-padded weer voor: `01 Sunrise.mp3`.
+
+### Hoofdstukken bewaren en later splitsen
+
+De gebruikte hoofdstukken worden altijd als `chapters.json` naast de tracks weggeschreven.
+Dat is je vangnet: YouTube geeft ze niet altijd, dus zodra je ze één keer binnen hebt kun
+je er altijd op terugvallen.
+
+```powershell
+ydm "https://www.youtube.com/watch?v=..." -ab -ch "chapters.json"
+```
+
+`-ChapterFile` (`-ch`) slikt zowel een kale lijst als de complete uitvoer van
+`yt-dlp --dump-json`:
+
+```json
+[ { "start_time": 0,   "end_time": 137, "title": "Introduction" },
+  { "start_time": 137, "end_time": 228, "title": "Sayings of Persian monarchs" } ]
+```
+
+Een meegegeven bestand gaat voor alle andere bronnen. Ontbreekt `end_time`, dan loopt het
+laatste hoofdstuk door tot het eind van de video.
+
+Staat het **complete bestand** al in de doelmap — van `-KeepFull`, of van een eerdere run
+die geen chapters kon vinden — dan knipt `ydm` daaruit in plaats van opnieuw te
+downloaden. Dat gaat met `-c copy`, dus zonder tweede encodeerslag en met behoud van de
+album art:
+
+```
+Bron: The Sayings of Kings and Commanders.mp3 (al aanwezig, niet opnieuw gedownload)
+```
+
+Zo kun je eerst binnenhalen en later pas splitsen, en uitproberen welke indeling je
+bevalt.
 
 ## Album art
 
