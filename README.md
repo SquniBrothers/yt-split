@@ -10,6 +10,15 @@ Twee workflows:
 - **Zonder `-s`** — download de hele video, splitst met ffmpeg in chapters
 - **Met `-s`** — kies interactief chapters, download alleen die stukken via `--download-sections`
 
+> Een hele **playlist of channel** downloaden i.p.v. één video? Daarvoor zit `ypl.ps1` in
+> deze repo: die haalt de hele lijst op naar `<kanaal>\<playlist>\` en stript de tekst die
+> in élke videotitel terugkomt. Zie **[ypl.md](ypl.md)**.
+
+> Alleen de **audio** als mp3, met tags en de thumbnail als album art? Dat doet `ydm.ps1`:
+> één video wordt één nummer, een playlist een album, en `-s` knipt een lange video op in
+> zijn chapters. Met `-ab` gaat het als luisterboek naar `~\Audiobooks`, met `-pc` als
+> podcast naar `~\Podcasts`. Zie **[ydm.md](ydm.md)**.
+
 ## Voorbeelden
 
 ```powershell
@@ -107,6 +116,8 @@ Output: C:\Users\User\videos\freeCodeCamp.org\Command_Line_Basics_for_Beginners_
 ## Inhoud
 
 - [Voorbeeld-run](#voorbeeld-run)
+- [`ypl.ps1` — hele playlists downloaden](ypl.md)
+- [`ydm.ps1` — audio als mp3 met album art](ydm.md)
 
 - [Vereisten](#vereisten)
 - [Installatie](#installatie)
