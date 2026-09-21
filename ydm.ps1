@@ -540,13 +540,14 @@ function Get-SectionMode {
     return $null
 }
 
-# Woorden splitsen, maar "tussen quotes" bij elkaar houden
+# Woorden splitsen, maar "tussen quotes" of 'tussen quotes' bij elkaar houden
 function Split-OptionTokens {
     param([string]$Text)
     $tokens = [System.Collections.Generic.List[string]]::new()
-    foreach ($m in [regex]::Matches($Text, '"([^"]*)"|(\S+)')) {
-        if ($m.Groups[1].Success) { $null = $tokens.Add($m.Groups[1].Value) }
-        else                      { $null = $tokens.Add($m.Groups[2].Value) }
+    foreach ($m in [regex]::Matches($Text, '"([^"]*)"|''([^'']*)''|(\S+)')) {
+        if     ($m.Groups[1].Success) { $null = $tokens.Add($m.Groups[1].Value) }
+        elseif ($m.Groups[2].Success) { $null = $tokens.Add($m.Groups[2].Value) }
+        else                          { $null = $tokens.Add($m.Groups[3].Value) }
     }
     return $tokens.ToArray()
 }
@@ -906,8 +907,15 @@ function Invoke-DownloadTrack {
                  elseif ($trackAlbum) { $trackAlbum }
                  else { $cleanTitle }
 
+    # Een luisterboek krijgt altijd zijn eigen map onder het kanaal, met de
+    # volledige videotitel - ook als het maar één bestand is. Zo staat elk boek
+    # apart en zie je aan het pad van welk kanaal het komt.
+    $bookDir = if ($Album) { $Album } else { $cleanTitle }
+
     $OutDir = if ($OutDirOverride) {
         $OutDirOverride
+    } elseif ($Audiobook) {
+        Join-ArtistAlbumDir -Base $BaseDir -ArtistName $channel -AlbumTitle $bookDir
     } elseif ($doSplit) {
         Join-ArtistAlbumDir -Base $BaseDir -ArtistName $trackArtist -AlbumTitle $albumName
     } else {

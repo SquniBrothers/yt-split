@@ -157,16 +157,21 @@ blijven gewoon werken.
 | | `-Audiobook` (`-ab`) | `-Podcast` (`-pc`) |
 |---|---|---|
 | Map | `$HOME\Audiobooks` | `$HOME\Podcasts` |
-| Structuur | `<auteur>\<boek>\01 Chapter 1.mp3` | `<show>\2026-09-18 Aflevering 12.mp3` |
+| Structuur | `<kanaal>\<videotitel>\01 Chapter 1.mp3` | `<show>\2026-09-18 Aflevering 12.mp3` |
 | `-s` | automatisch aan | uit (podcast-chapters zijn meestal reclame) |
 | `genre`-tag | `Audiobook` | `Podcast` |
 | `album`-tag | de boektitel | de show (het kanaal) |
 | `artist`-tag | de auteur uit `"Auteur - Titel"`, anders het kanaal | altijd het kanaal |
 
 ```powershell
-ydm "https://www.youtube.com/watch?v=..." -ab      # -> C:\Users\User\Audiobooks\Frank_Herbert\Dune\01 Chapter 1.mp3
+ydm "https://www.youtube.com/watch?v=..." -ab      # -> C:\Users\User\Audiobooks\Ancient_Recitations\The_Prince\01 Chapter 1.mp3
 ydm "https://www.youtube.com/@DeShow/videos" -pc   # -> C:\Users\User\Podcasts\De_Show\...
 ```
+
+Elk luisterboek krijgt zijn eigen map onder het kanaal, met de volledige videotitel —
+ook als het maar één bestand is. Zo staat elk boek apart en zie je aan het pad waar het
+vandaan komt. De artiest uit `"Auteur - Titel"` blijft wel in de tags staan; alleen het
+pad volgt het kanaal.
 
 Twee details die het verschil maken:
 
@@ -264,7 +269,7 @@ $HOME\music\Daft_Punk\Daft Punk - Around the World.mp3          # losse track
 $HOME\music\Pink_Floyd\The_Wall\01 In the Flesh.mp3             # -s
 $HOME\music\Lofi_Girl\Beats_To_Study_To\01 Sunrise.mp3          # playlist
 $HOME\music\Lofi_Girl\Beats_To_Study_To\album.json
-$HOME\Audiobooks\Frank_Herbert\Dune\01 Chapter 1.mp3            # -ab
+$HOME\Audiobooks\Ancient_Recitations\The_Prince\01 Chapter 1.mp3  # -ab
 $HOME\Podcasts\De_Show\2026-09-18 Aflevering 12.mp3             # -pc
 ```
 
@@ -360,6 +365,8 @@ https://www.youtube.com/playlist?list=PL... -i "1-10" -o "D:\ergens anders"
 | `-c`, `-a`, `-n`, `-k`, `-r`, `-keepfull` | de schakelaars |
 | `-b <map>`, `-o <map>` | eigen map; `-b` gaat vóór de preset-map |
 | `-Artist "..."`, `-Album "..."` | tags forceren (quotes voor spaties) |
+
+Quotes mogen enkel of dubbel: `-s` en `'-s'` en `"-s"` zijn hetzelfde.
 
 Alles na een spatie en een `#` is commentaar — een `#` in de URL zelf heeft geen spatie
 ervoor en blijft dus staan. Een optie die niet klopt wordt met regelnummer gemeld en
